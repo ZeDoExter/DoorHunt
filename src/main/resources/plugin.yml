@@ -1,0 +1,4 @@
+name: DoorHunt
+version: '1.0-SNAPSHOT'
+main: org.ZeDoExter.doorHunt.DoorHunt
+api-version: '1.21'
