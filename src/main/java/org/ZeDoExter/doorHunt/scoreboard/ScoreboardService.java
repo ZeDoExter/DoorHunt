@@ -1,5 +1,6 @@
 package org.ZeDoExter.doorHunt.scoreboard;
 
+import me.clip.placeholderapi.PlaceholderAPI;
 import org.ZeDoExter.doorHunt.DoorHunt;
 import org.ZeDoExter.doorHunt.game.GameInstance;
 import org.ZeDoExter.doorHunt.game.GameManager;
@@ -23,9 +24,14 @@ public class ScoreboardService {
     private final Map<GameState, ScoreboardLayout> layouts = new EnumMap<>(GameState.class);
     private ScoreboardLayout lobbyLayout;
     private final Set<UUID> lobbyPlayers = ConcurrentHashMap.newKeySet();
+    private final boolean placeholderApiHooked;
 
     public ScoreboardService(DoorHunt plugin) {
         this.plugin = plugin;
+        this.placeholderApiHooked = Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI");
+        if (placeholderApiHooked) {
+            plugin.getLogger().info("Hooked into PlaceholderAPI for scoreboards.");
+        }
     }
 
     public void reload() {
@@ -164,14 +170,14 @@ public class ScoreboardService {
             return;
         }
         Scoreboard scoreboard = Bukkit.getScoreboardManager().getNewScoreboard();
-        Objective objective = scoreboard.registerNewObjective("doorhunt", "dummy", colorize(replace(layout.getTitle(), placeholders)));
+        Objective objective = scoreboard.registerNewObjective("doorhunt", "dummy", colorize(resolvePlaceholders(layout.getTitle(), player, placeholders)));
         objective.setDisplaySlot(DisplaySlot.SIDEBAR);
 
         List<String> lines = layout.getLines();
         int score = lines.size();
         Set<String> used = new HashSet<>();
         for (String raw : lines) {
-            String line = colorize(replace(raw, placeholders));
+            String line = colorize(resolvePlaceholders(raw, player, placeholders));
             line = ensureUnique(line, used);
             objective.getScore(line).setScore(score--);
         }
@@ -233,10 +239,18 @@ public class ScoreboardService {
         return result;
     }
 
-    private String replace(String input, Map<String, String> placeholders) {
+    private String resolvePlaceholders(String input, Player player, Map<String, String> placeholders) {
+        if (input == null) {
+            return "";
+        }
         String output = input;
-        for (Map.Entry<String, String> entry : placeholders.entrySet()) {
-            output = output.replace("%" + entry.getKey() + "%", entry.getValue());
+        if (placeholders != null) {
+            for (Map.Entry<String, String> entry : placeholders.entrySet()) {
+                output = output.replace("%" + entry.getKey() + "%", entry.getValue());
+            }
+        }
+        if (placeholderApiHooked && player != null) {
+            output = PlaceholderAPI.setPlaceholders(player, output);
         }
         return output;
     }
