@@ -3,6 +3,8 @@ package org.ZeDoExter.doorHunt.game;
 import org.ZeDoExter.doorHunt.DoorHunt;
 import org.ZeDoExter.doorHunt.scoreboard.ScoreboardService;
 import org.bukkit.Bukkit;
+import org.bukkit.Color;
+import org.bukkit.FireworkEffect;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -27,6 +29,7 @@ public class GameInstance {
     private final Set<UUID> seekers = new HashSet<>();
     private final Set<UUID> hiders = new HashSet<>();
     private final Map<UUID, Integer> seekerKills = new HashMap<>();
+    private final Map<UUID, UUID> lastAttackers = new HashMap<>();
     private final int endCooldownSeconds;
     private GameState state = GameState.WAITING;
     private BukkitTask countdownTask;
@@ -34,6 +37,7 @@ public class GameInstance {
     private BukkitTask hideTask;
     private BukkitTask liveTask;
     private BukkitTask scoreboardTask;
+    private BukkitTask fireworksTask;
     private int countdownRemaining;
     private int prepareRemaining;
     private int hideRemaining;
@@ -152,6 +156,7 @@ public class GameInstance {
         seekers.remove(uuid);
         hiders.remove(uuid);
         seekerKills.remove(uuid);
+        lastAttackers.remove(uuid);
         gameManager.setPlayerGame(player, null);
         sendToLobby(player, silent ? null : "&aกลับสู่ Lobby แล้ว!" );
         if (removed && !silent) {
@@ -216,6 +221,7 @@ public class GameInstance {
             countdownTask.cancel();
             countdownTask = null;
         }
+        cancelFireworksTask();
         countdownRemaining = 0;
     }
 
@@ -360,12 +366,47 @@ public class GameInstance {
         }
         hiders.remove(victim.getUniqueId());
         seekers.add(victim.getUniqueId());
+        lastAttackers.remove(victim.getUniqueId());
         seekerKills.merge(killer.getUniqueId(), 1, Integer::sum);
         Map<String, String> placeholders = new HashMap<>();
         placeholders.put("killer", killer.getName());
         placeholders.put("victim", victim.getName());
-        placeholders.put("time", formatTimeRemaining(GameState.LIVE));
+        placeholders.put("time", formatTimeRemaining());
         String message = plugin.getLanguageManager().random("kill-messages", placeholders, "&c{killer} eliminated &a{victim}");
+        broadcast(message);
+        preparePlayerForSeeker(victim);
+        victim.teleport(arena.getHiderSpawn());
+        checkWinConditions();
+        updateScoreboards();
+    }
+
+    public void recordAttack(Player attacker, Player victim) {
+        if (!isSeeker(attacker) || !isHider(victim)) {
+            return;
+        }
+        lastAttackers.put(victim.getUniqueId(), attacker.getUniqueId());
+    }
+    public void handleExplosionKill(Player victim) {
+        if (state != GameState.LIVE && state != GameState.HIDING) {
+            return;
+        }
+        if (!hiders.contains(victim.getUniqueId())) {
+            return;
+        }
+        UUID last = lastAttackers.remove(victim.getUniqueId());
+        if (last != null) {
+            Player killer = Bukkit.getPlayer(last);
+            if (killer != null && isSeeker(killer)) {
+                handleKill(killer, victim);
+                return;
+            }
+        }
+        hiders.remove(victim.getUniqueId());
+        seekers.add(victim.getUniqueId());
+        Map<String, String> placeholders = new HashMap<>();
+        placeholders.put("victim", victim.getName());
+        placeholders.put("time", formatTimeRemaining());
+        String message = plugin.getLanguageManager().random("death-messages", placeholders, "&c{victim} ถูกระเบิดกระเด็น! &7({time} left)");
         broadcast(message);
         preparePlayerForSeeker(victim);
         victim.teleport(arena.getHiderSpawn());
@@ -461,27 +502,65 @@ public class GameInstance {
     }
 
     private void launchCelebrationFireworks() {
-        for (UUID uuid : players) {
-            Player player = Bukkit.getPlayer(uuid);
-            if (player != null) {
-                spawnRandomFirework(player.getLocation());
+        cancelFireworksTask();
+        fireworksTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            if (players.isEmpty()) {
+                cancelFireworksTask();
+                return;
             }
-        }
+            for (UUID uuid : players) {
+                Player player = Bukkit.getPlayer(uuid);
+                if (player != null) {
+                    spawnRandomFirework(player.getLocation());
+                }
+            }
+        }, 0L, 20L);
+        Bukkit.getScheduler().runTaskLater(plugin, this::cancelFireworksTask, Math.max(40L, endCooldownSeconds * 20L));
     }
 
     private void spawnRandomFirework(Location base) {
-        Location location = base.clone().add(ThreadLocalRandom.current().nextDouble(-20, 20), 1, ThreadLocalRandom.current().nextDouble(-20, 20));
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        Location location = base.clone().add(random.nextDouble(-20, 20), 1, random.nextDouble(-20, 20));
         location.getWorld().spawn(location, org.bukkit.entity.Firework.class, firework -> {
             var meta = firework.getFireworkMeta();
-            meta.addEffect(org.bukkit.FireworkEffect.builder()
-                    .withColor(org.bukkit.Color.fromRGB(ThreadLocalRandom.current().nextInt(0xFFFFFF)))
-                    .with(org.bukkit.FireworkEffect.Type.BALL_LARGE)
-                    .withFlicker()
-                    .build());
-            meta.setPower(1);
+            meta.clearEffects();
+            meta.addEffect(buildRandomEffect(random));
+            meta.setPower(random.nextInt(1, 3));
             firework.setFireworkMeta(meta);
         });
     }
+
+    private FireworkEffect buildRandomEffect(ThreadLocalRandom random) {
+        FireworkEffect.Type[] types = FireworkEffect.Type.values();
+        FireworkEffect.Builder builder = FireworkEffect.builder()
+                .with(types[random.nextInt(types.length)])
+                .withColor(randomColors(random));
+        if (random.nextBoolean()) {
+            builder.withFade(randomColors(random));
+        }
+        if (random.nextBoolean()) {
+            builder.withFlicker();
+        }
+        if (random.nextBoolean()) {
+            builder.withTrail();
+        }
+        return builder.build();
+    }
+    private List<Color> randomColors(ThreadLocalRandom random) {
+        int amount = random.nextInt(1, 4);
+        List<Color> colors = new ArrayList<>(amount);
+        for (int i = 0; i < amount; i++) {
+            colors.add(Color.fromRGB(random.nextInt(0x1000000)));
+        }
+        return colors;
+    }
+    private void cancelFireworksTask() {
+        if (fireworksTask != null) {
+            fireworksTask.cancel();
+            fireworksTask = null;
+        }
+    }
+
 
     private void resetToLobby() {
         changeState(GameState.WAITING);
@@ -490,6 +569,7 @@ public class GameInstance {
             scoreboardTask.cancel();
             scoreboardTask = null;
         }
+        cancelFireworksTask();
         for (UUID uuid : new ArrayList<>(players)) {
             Player player = Bukkit.getPlayer(uuid);
             if (player != null) {
@@ -503,6 +583,7 @@ public class GameInstance {
         seekers.clear();
         hiders.clear();
         seekerKills.clear();
+        lastAttackers.clear();
         countdownRemaining = 0;
         hideRemaining = 0;
         liveRemaining = 0;
@@ -524,6 +605,7 @@ public class GameInstance {
             liveTask = null;
         }
         cancelCountdown();
+        cancelFireworksTask();
         changeState(GameState.COOLDOWN);
         Bukkit.getScheduler().runTask(plugin, this::resetToLobby);
     }
@@ -555,6 +637,7 @@ public class GameInstance {
         if (scoreboardTask != null) {
             scoreboardTask.cancel();
         }
+        cancelFireworksTask();
         for (UUID uuid : new ArrayList<>(players)) {
             Player player = Bukkit.getPlayer(uuid);
             if (player != null) {
@@ -568,6 +651,7 @@ public class GameInstance {
         seekers.clear();
         hiders.clear();
         seekerKills.clear();
+        lastAttackers.clear();
         gameManager.updateLobbyBoards();
     }
 

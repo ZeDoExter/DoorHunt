@@ -4,7 +4,7 @@ settings:
   recruiting-countdown: 60
   prepare-duration: 10
   hide-duration: 30
-  live-duration: 3600
+  live-duration: 60
   end-cooldown: 10
   seeker-loadout:
     commands:

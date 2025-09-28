@@ -35,7 +35,12 @@ public class ScoreboardService {
         String title = config.getString("title", "&aDoor Hunt");
         List<String> defaultLines = config.getStringList("states.DEFAULT");
         if (defaultLines.isEmpty()) {
-            defaultLines = List.of("&fDoor Hunt");
+            List<String> hidingLines = config.getStringList("states.HIDING");
+            if (hidingLines.isEmpty()) {
+                defaultLines = List.of("&fDoor Hunt");
+            } else {
+                defaultLines = hidingLines;
+            }
         }
         defaultLayout = new ScoreboardLayout(title, defaultLines);
         ConfigurationSection states = config.getConfigurationSection("states");
@@ -71,7 +76,7 @@ public class ScoreboardService {
     }
 
     public void update(GameInstance instance, Map<String, String> placeholders) {
-        ScoreboardLayout layout = layouts.getOrDefault(instance.getState(), defaultLayout);
+        ScoreboardLayout layout = resolveLayout(instance.getState());
         if (layout == null) {
             return;
         }
@@ -83,6 +88,18 @@ public class ScoreboardService {
             }
         }
     }
+
+    private ScoreboardLayout resolveLayout(GameState state) {
+        GameState effective = remapState(state);
+        return layouts.getOrDefault(effective, defaultLayout);
+    }
+    private GameState remapState(GameState state) {
+        return switch (state) {
+            case PREPARING, HIDING, LIVE, ENDING, COOLDOWN -> GameState.HIDING;
+            default -> state;
+        };
+    }
+
 
     public void clear(Player player) {
         lobbyPlayers.remove(player.getUniqueId());

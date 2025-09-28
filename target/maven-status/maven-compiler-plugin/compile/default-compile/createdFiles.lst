@@ -12,6 +12,7 @@ org\ZeDoExter\doorHunt\game\GameArena.class
 org\ZeDoExter\doorHunt\util\LocationUtil.class
 org\ZeDoExter\doorHunt\game\ArenaSetting.class
 org\ZeDoExter\doorHunt\game\GameState.class
+org\ZeDoExter\doorHunt\scoreboard\ScoreboardService$1.class
 org\ZeDoExter\doorHunt\listener\SettingsListener.class
 org\ZeDoExter\doorHunt\scoreboard\ScoreboardLayout.class
 org\ZeDoExter\doorHunt\util\QualityArmoryHook.class

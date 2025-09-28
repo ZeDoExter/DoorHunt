@@ -7,12 +7,14 @@ import org.ZeDoExter.doorHunt.game.GameState;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
+import org.bukkit.entity.TNTPrimed;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
@@ -108,6 +110,14 @@ public class GameListener implements Listener {
         }
         if (instance.getState() == GameState.WAITING || instance.getState() == GameState.COUNTDOWN || instance.getState() == GameState.ENDING || instance.getState() == GameState.COOLDOWN) {
             event.setCancelled(true);
+            return;
+        }
+        if ((instance.getState() == GameState.HIDING || instance.getState() == GameState.LIVE)
+                && instance.isHider(player)
+                && isExplosion(event.getCause())
+                && event.getFinalDamage() >= player.getHealth()) {
+            event.setCancelled(true);
+            instance.handleExplosionKill(player);
         }
     }
 
@@ -138,6 +148,7 @@ public class GameListener implements Listener {
             event.setCancelled(true);
             return;
         }
+        instance.recordAttack(attacker, victim);
         if (event.getFinalDamage() >= victim.getHealth()) {
             event.setCancelled(true);
             instance.handleKill(attacker, victim);
@@ -153,6 +164,13 @@ public class GameListener implements Listener {
                 return player;
             }
         }
+        if (damager instanceof TNTPrimed tnt && tnt.getSource() instanceof Player player) {
+            return player;
+        }
         return null;
+    }
+
+    private boolean isExplosion(DamageCause cause) {
+        return cause == DamageCause.BLOCK_EXPLOSION || cause == DamageCause.ENTITY_EXPLOSION;
     }
 }
