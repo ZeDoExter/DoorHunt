@@ -235,7 +235,7 @@ public class GameManager {
     public void beginPrompt(Player player, GameArena arena, ArenaSetting setting) {
         pendingPrompts.put(player.getUniqueId(), new SettingsPrompt(arena, setting));
         player.closeInventory();
-        player.sendMessage(plugin.color("&e" + setting.getPrompt() + " &7(type 'cancel' to abort)"));
+        player.sendMessage(plugin.prefixed("&e" + setting.getPrompt() + " &7(type 'cancel' to abort)"));
     }
 
     public boolean isAwaitingInput(Player player) {
@@ -249,7 +249,7 @@ public class GameManager {
         }
         if (message.equalsIgnoreCase("cancel")) {
             pendingPrompts.remove(player.getUniqueId());
-            player.sendMessage(plugin.color("&cยกเลิกการตั้งค่า"));
+            player.sendMessage(plugin.prefixed("&cCancelled setting."));
             reopenLater(player);
             return;
         }
@@ -257,17 +257,17 @@ public class GameManager {
         try {
             value = Integer.parseInt(message.trim());
         } catch (NumberFormatException ex) {
-            player.sendMessage(plugin.color("&cกรุณากรอกเป็นตัวเลข"));
+            player.sendMessage(plugin.prefixed("&cPlease enter a number."));
             return;
         }
         if (!prompt.setting.isValid(prompt.arena, value)) {
-            player.sendMessage(plugin.color("&cค่านี้ไม่ถูกต้องสำหรับ " + prompt.setting.getDisplayName()));
+            player.sendMessage(plugin.prefixed("&cThat value is not valid for " + prompt.setting.getDisplayName() + "."));
             return;
         }
         prompt.setting.set(prompt.arena, value);
         saveArena(prompt.arena);
         pendingPrompts.remove(player.getUniqueId());
-        player.sendMessage(plugin.color("&aตั้งค่า " + prompt.setting.getDisplayName() + " เป็น &e" + value));
+        player.sendMessage(plugin.prefixed("&aSet " + prompt.setting.getDisplayName() + " to &e" + value + "&a."));
         reopenLater(player);
     }
 

@@ -12,6 +12,7 @@ import java.util.concurrent.ThreadLocalRandom;
 public class LanguageManager {
     private final DoorHunt plugin;
     private FileConfiguration config;
+    private String prefix;
 
     public LanguageManager(DoorHunt plugin) {
         this.plugin = plugin;
@@ -20,6 +21,7 @@ public class LanguageManager {
     public void reload() {
         File file = new File(plugin.getDataFolder(), "language.yml");
         config = YamlConfiguration.loadConfiguration(file);
+        prefix = config.getString("prefix", "&8[&aDoor Hunt&8] &7");
     }
 
     public String random(String path, Map<String, String> placeholders, String fallback) {
@@ -31,13 +33,18 @@ public class LanguageManager {
         } else {
             value = options.get(ThreadLocalRandom.current().nextInt(options.size()));
         }
-        return plugin.color(apply(value != null ? value : fallback, placeholders));
+        return plugin.color(getPrefix() + apply(value != null ? value : fallback, placeholders));
     }
 
     public String format(String path, Map<String, String> placeholders, String fallback) {
         ensureLoaded();
         String value = config.getString(path, fallback);
-        return plugin.color(apply(value != null ? value : fallback, placeholders));
+        return plugin.color(getPrefix() + apply(value != null ? value : fallback, placeholders));
+    }
+
+    public String getPrefix() {
+        ensureLoaded();
+        return prefix != null ? prefix : "";
     }
 
     private String apply(String message, Map<String, String> placeholders) {

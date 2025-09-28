@@ -112,26 +112,26 @@ public class GameInstance {
             player.teleport(player.getWorld().getSpawnLocation());
         }
         if (message != null && !message.isBlank()) {
-            player.sendMessage(plugin.color(message));
+            player.sendMessage(plugin.prefixed(message));
         }
         gameManager.showLobbyBoard(player);
     }
 
     public void join(Player player) {
         if (!arena.isConfigured()) {
-            player.sendMessage(plugin.color("&cแมพนี้ยังตั้งค่าไม่ครบ!"));
+            player.sendMessage(plugin.prefixed("&cThis arena isn't fully configured yet!"));
             return;
         }
         if (players.contains(player.getUniqueId())) {
-            player.sendMessage(plugin.color("&eคุณอยู่ในเกมนี้อยู่แล้ว"));
+            player.sendMessage(plugin.prefixed("&eYou are already in this game."));
             return;
         }
         if (state != GameState.WAITING && state != GameState.COUNTDOWN) {
-            player.sendMessage(plugin.color("&cเกมกำลังดำเนินอยู่ รอรอบต่อไปนะ"));
+            player.sendMessage(plugin.prefixed("&cThis round is already in progress. Please wait for the next one."));
             return;
         }
         if (players.size() >= arena.getMaxPlayers()) {
-            player.sendMessage(plugin.color("&cเกมเต็มแล้ว"));
+            player.sendMessage(plugin.prefixed("&cThe game is already full."));
             return;
         }
 
@@ -143,7 +143,7 @@ public class GameInstance {
 
         preparePlayerForLobby(player);
         player.teleport(arena.getLobbyLocation());
-        broadcast(plugin.color("&a" + player.getName() + " &eเข้าร่วมเกม &7(" + players.size() + "/" + arena.getMaxPlayers() + ")"));
+        broadcast(plugin.prefixed("&a" + player.getName() + " &ejoined the game &7(" + players.size() + "/" + arena.getMaxPlayers() + ")"));
 
         if (players.size() >= arena.getMinPlayers() && state == GameState.WAITING) {
             startCountdown();
@@ -160,9 +160,9 @@ public class GameInstance {
         seekerKills.remove(uuid);
         lastAttackers.remove(uuid);
         gameManager.setPlayerGame(player, null);
-        sendToLobby(player, silent ? null : "&aกลับสู่ Lobby แล้ว!" );
+        sendToLobby(player, silent ? null : "&aReturned to the lobby!" );
         if (removed && !silent) {
-            broadcast(plugin.color("&c" + player.getName() + " &eออกจากเกม"));
+            broadcast(plugin.prefixed("&c" + player.getName() + " &eleft the game."));
         }
         checkCountdownCancel();
         checkWinConditions();
@@ -181,7 +181,7 @@ public class GameInstance {
         ItemStack item = new ItemStack(Material.RED_BED);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.setDisplayName(plugin.color("&cกลับ Lobby"));
+            meta.setDisplayName(plugin.getReturnItemName());
             meta.addItemFlags(ItemFlag.values());
             item.setItemMeta(meta);
         }
@@ -191,13 +191,13 @@ public class GameInstance {
     private void startCountdown() {
         changeState(GameState.COUNTDOWN);
         countdownRemaining = arena.getRecruitingCountdown();
-        broadcast(plugin.color("&eผู้เล่นครบแล้ว! เริ่มใน &c" + countdownRemaining + " &eวินาที"));
+        broadcast(plugin.prefixed("&eEnough players! Starting in &c" + countdownRemaining + " &eseconds."));
         if (countdownTask != null) {
             countdownTask.cancel();
         }
         countdownTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             if (players.size() < arena.getMinPlayers()) {
-                broadcast(plugin.color("&cผู้เล่นไม่พอ ยกเลิกการนับถอยหลัง"));
+                broadcast(plugin.prefixed("&cNot enough players. Countdown cancelled."));
                 changeState(GameState.WAITING);
                 cancelCountdown();
                 updateScoreboards();
@@ -210,7 +210,7 @@ public class GameInstance {
                 beginGame();
             } else {
                 if (countdownRemaining <= 5 || countdownRemaining % 10 == 0) {
-                    broadcast(plugin.color("&eเริ่มใน &c" + countdownRemaining + " &eวินาที"));
+                    broadcast(plugin.prefixed("&eStarting in &c" + countdownRemaining + " &eseconds."));
                     playSound(Sound.BLOCK_NOTE_BLOCK_PLING, 1.0f, 1.5f);
                 }
                 updateScoreboards();
@@ -248,9 +248,9 @@ public class GameInstance {
         liveRemaining = arena.getLiveDuration();
 
         if (prepareRemaining > 0) {
-            broadcast(plugin.color("&eเลือกผู้เล่นเรียบร้อย! เตรียมเริ่มใน &c" + prepareRemaining + " &eวินาที"));
+            broadcast(plugin.prefixed("&eSeekers chosen! Starting in &c" + prepareRemaining + " &eseconds."));
         } else {
-            broadcast(plugin.color("&eเลือกผู้เล่นเรียบร้อย!"));
+            broadcast(plugin.prefixed("&eSeekers chosen!"));
         }
         playSound(Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.0f);
 
@@ -268,7 +268,7 @@ public class GameInstance {
                 return;
             }
             if (prepareRemaining <= 5 || prepareRemaining % 10 == 0) {
-                broadcast(plugin.color("&eเริ่มใน &c" + prepareRemaining + " &eวินาที"));
+                broadcast(plugin.prefixed("&eStarting in &c" + prepareRemaining + " &eseconds."));
                 playSound(Sound.BLOCK_NOTE_BLOCK_PLING, 1.0f, 1.5f);
             }
             updateScoreboards();
@@ -287,14 +287,14 @@ public class GameInstance {
             player.setGameMode(GameMode.SURVIVAL);
             if (seekers.contains(uuid)) {
                 player.teleport(arena.getSeekerWaitSpawn());
-                player.sendMessage(plugin.color("&cคุณเป็นคนหา! รอให้คนแอบแอบก่อน"));
+                player.sendMessage(plugin.prefixed("&cYou are a seeker! Wait for the hiders to hide."));
             } else {
                 player.teleport(arena.getHiderSpawn());
-                player.sendMessage(plugin.color("&aคุณเป็นคนแอบ! มีเวลา " + Math.max(0, hideRemaining) + " วิในการหนี"));
+                player.sendMessage(plugin.prefixed("&aYou are a hider! You have " + Math.max(0, hideRemaining) + " seconds to run."));
             }
         }
 
-        broadcast(plugin.color("&eเริ่มรอบใหม่! &c" + seekers.size() + " &eคนหา, &a" + hiders.size() + " &eคนแอบ"));
+        broadcast(plugin.prefixed("&eNew round! &c" + seekers.size() + " &eseekers, &a" + hiders.size() + " &ahiders."));
         playSound(Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.0f);
 
         if (hideTask != null) {
@@ -335,13 +335,13 @@ public class GameInstance {
 
     private void startLivePhase() {
         changeState(GameState.LIVE);
-        broadcast(plugin.color("&cคนหาออกล่าแล้ว!"));
+        broadcast(plugin.prefixed("&cSeekers are on the hunt!"));
         Location release = arena.getHiderSpawn();
         for (UUID uuid : seekers) {
             Player player = Bukkit.getPlayer(uuid);
             if (player != null) {
                 player.teleport(release);
-                player.sendMessage(plugin.color("&cออกล่าได้แล้ว!"));
+                player.sendMessage(plugin.prefixed("&cYou can start hunting!"));
                 plugin.getQualityArmoryHook().giveSeekerLoadout(player);
             }
         }
@@ -411,7 +411,7 @@ public class GameInstance {
         placeholders.put("victim", victim.getName());
         placeholders.put("time", formatTimeRemaining());
         placeholders.put("time_label", getTimeLabel());
-        String message = plugin.getLanguageManager().random("death-messages", placeholders, "&c{victim} ถูกระเบิดกระเด็น! &7({time} left)");
+        String message = plugin.getLanguageManager().random("death-messages", placeholders, "&c{victim} was blown up! &7({time} left)");
         broadcast(message);
         preparePlayerForSeeker(victim);
         victim.teleport(arena.getHiderSpawn());
@@ -422,7 +422,7 @@ public class GameInstance {
     private void preparePlayerForSeeker(Player player) {
         plugin.resetPlayer(player);
         player.setGameMode(GameMode.SURVIVAL);
-        player.sendMessage(plugin.color("&cตอนนี้คุณเป็นคนหาแล้ว!"));
+        player.sendMessage(plugin.prefixed("&cYou are now a seeker!"));
         plugin.getQualityArmoryHook().giveSeekerLoadout(player);
     }
 
@@ -469,12 +469,14 @@ public class GameInstance {
                     .map(entry -> {
                         Player player = Bukkit.getPlayer(entry.getKey());
                         String name = player != null ? player.getName() : Bukkit.getOfflinePlayer(entry.getKey()).getName();
-                        return plugin.color("&c" + name + " &7- &e" + entry.getValue() + " kill");
+                        int kills = entry.getValue();
+                        String label = kills == 1 ? " kill" : " kills";
+                        return plugin.prefixed("&c" + name + " &7- &e" + kills + label);
                     })
                     .collect(Collectors.toList());
-            broadcast(plugin.color("&cคนหาชนะ!"));
+            broadcast(plugin.prefixed("&cSeekers win!"));
             if (!topSeekers.isEmpty()) {
-                broadcast(plugin.color("&7อันดับคนหา:"));
+                broadcast(plugin.prefixed("&7Top seekers:"));
                 topSeekers.forEach(this::broadcast);
             }
         } else {
@@ -485,9 +487,9 @@ public class GameInstance {
                     })
                     .filter(Objects::nonNull)
                     .collect(Collectors.toList());
-            broadcast(plugin.color("&aคนแอบชนะ!"));
+            broadcast(plugin.prefixed("&aHiders win!"));
             if (!survivors.isEmpty()) {
-                broadcast(plugin.color("&7ผู้รอดชีวิต: &a" + String.join(" &7, &a", survivors)));
+                broadcast(plugin.prefixed("&7Survivors: &a" + String.join(" &7, &a", survivors)));
             }
         }
 
@@ -506,7 +508,7 @@ public class GameInstance {
                 if (player != null) {
                     plugin.resetPlayer(player);
                     scoreboardService.clear(player);
-                    player.sendMessage(plugin.color("&eรอ &c" + cooldownRemaining + " &eวินาทีแล้วจะกลับ Lobby"));
+                    player.sendMessage(plugin.prefixed("&eReturning to the lobby in &c" + cooldownRemaining + " &eseconds."));
                 }
             }
             if (cooldownRemaining <= 0) {
@@ -631,7 +633,7 @@ public class GameInstance {
             Player player = Bukkit.getPlayer(uuid);
             if (player != null) {
                 gameManager.setPlayerGame(player, null);
-                sendToLobby(player, "&aกลับสู่ Lobby แล้ว!");
+                sendToLobby(player, "&aReturned to the lobby!");
             } else {
                 gameManager.clearPlayer(uuid);
             }
@@ -652,7 +654,7 @@ public class GameInstance {
         if (players.isEmpty()) {
             return;
         }
-        broadcast(plugin.color("&cรอบนี้ถูกผู้ดูแลยุติ"));
+        broadcast(plugin.prefixed("&cThis round was ended by a moderator."));
         cancelPrepareTask();
         if (hideTask != null) {
             hideTask.cancel();
@@ -783,7 +785,7 @@ public class GameInstance {
         if (state == GameState.COUNTDOWN && players.size() < arena.getMinPlayers()) {
             changeState(GameState.WAITING);
             cancelCountdown();
-            broadcast(plugin.color("&cผู้เล่นไม่พอ ยกเลิกการนับถอยหลัง"));
+            broadcast(plugin.prefixed("&cNot enough players. Countdown cancelled."));
         }
     }
 

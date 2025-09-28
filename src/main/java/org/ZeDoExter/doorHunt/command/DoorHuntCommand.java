@@ -100,21 +100,21 @@ public class DoorHuntCommand implements CommandExecutor, TabCompleter {
 
     private void handleJoin(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(plugin.color("&cเฉพาะผู้เล่นเท่านั้น"));
+            sender.sendMessage(plugin.prefixed("&cOnly players can use this command."));
             return;
         }
         if (args.length < 2) {
-            sender.sendMessage(plugin.color("&eใช้คำสั่ง: /dh join <id>"));
+            sender.sendMessage(plugin.prefixed("&eUsage: /dh join <id>"));
             return;
         }
         GameArena arena = gameManager.getArena(args[1]);
         if (arena == null) {
-            sender.sendMessage(plugin.color("&cไม่พบบแมพนั้น"));
+            sender.sendMessage(plugin.prefixed("&cNo arena with that id exists."));
             return;
         }
         GameInstance instance = gameManager.getInstance(arena);
         if (instance == null) {
-            sender.sendMessage(plugin.color("&cไม่สามารถเริ่มแมพนี้ได้"));
+            sender.sendMessage(plugin.prefixed("&cThat arena cannot be joined right now."));
             return;
         }
         instance.join(player);
@@ -122,27 +122,27 @@ public class DoorHuntCommand implements CommandExecutor, TabCompleter {
 
     private void handleLeave(CommandSender sender) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(plugin.color("&cเฉพาะผู้เล่นเท่านั้น"));
+            sender.sendMessage(plugin.prefixed("&cOnly players can use this command."));
             return;
         }
         GameInstance instance = gameManager.getGame(player);
         if (instance == null) {
-            sender.sendMessage(plugin.color("&cคุณไม่ได้อยู่ในเกม"));
+            sender.sendMessage(plugin.prefixed("&cYou are not currently in a game."));
             return;
         }
         instance.leave(player, false);
-        player.sendMessage(plugin.color("&aออกจากเกมแล้ว"));
+        player.sendMessage(plugin.prefixed("&aYou left the game."));
     }
 
     private void handleList(CommandSender sender) {
         Collection<GameArena> arenas = gameManager.getArenas();
         if (arenas.isEmpty()) {
-            sender.sendMessage(plugin.color("&cยังไม่มีแมพ"));
+            sender.sendMessage(plugin.prefixed("&cThere are no arenas yet."));
             return;
         }
-        sender.sendMessage(plugin.color("&6รายการแมพ:"));
+        sender.sendMessage(plugin.prefixed("&6Arenas:"));
         for (GameArena arena : arenas) {
-            sender.sendMessage(plugin.color("&e- &f" + arena.getId() + " &7(|" + arena.getDisplayName() + "|) &7" + formatLocationState(arena)));
+            sender.sendMessage(plugin.prefixed("&e- &f" + arena.getId() + " &7(|" + arena.getDisplayName() + "|) &7" + formatLocationState(arena)));
         }
     }
 
@@ -153,122 +153,122 @@ public class DoorHuntCommand implements CommandExecutor, TabCompleter {
                 missing.add(argument.key());
             }
         }
-        return missing.isEmpty() ? "&aพร้อม" : "&cขาด: " + String.join(", ", missing);
+        return missing.isEmpty() ? "&aReady" : "&cMissing: " + String.join(", ", missing);
     }
 
     private void handleCreate(CommandSender sender, String[] args) {
         if (!sender.hasPermission("doorhunt.admin")) {
-            sender.sendMessage(plugin.color("&cคุณไม่มีสิทธิ์"));
+            sender.sendMessage(plugin.prefixed("&cYou don't have permission."));
             return;
         }
         if (args.length < 2) {
-            sender.sendMessage(plugin.color("&eใช้คำสั่ง: /dh create <id> [ชื่อแสดงผล]"));
+            sender.sendMessage(plugin.prefixed("&eUsage: /dh create <id> [display name]"));
             return;
         }
         String id = args[1].toLowerCase(Locale.ROOT);
         if (gameManager.getArena(id) != null) {
-            sender.sendMessage(plugin.color("&cมี id นี้แล้ว"));
+            sender.sendMessage(plugin.prefixed("&cAn arena with that id already exists."));
             return;
         }
         String displayName = args.length >= 3 ? String.join(" ", Arrays.copyOfRange(args, 2, args.length)) : id;
         GameArena arena = gameManager.createArena(id, displayName);
-        sender.sendMessage(plugin.color("&aสร้างแมพ &e" + arena.getId() + " &aเรียบร้อย"));
+        sender.sendMessage(plugin.prefixed("&aCreated arena &e" + arena.getId() + " &a."));
     }
 
     private void handleDelete(CommandSender sender, String[] args) {
         if (!sender.hasPermission("doorhunt.admin")) {
-            sender.sendMessage(plugin.color("&cคุณไม่มีสิทธิ์"));
+            sender.sendMessage(plugin.prefixed("&cYou don't have permission."));
             return;
         }
         if (args.length < 2) {
-            sender.sendMessage(plugin.color("&eใช้คำสั่ง: /dh delete <id>"));
+            sender.sendMessage(plugin.prefixed("&eUsage: /dh delete <id>"));
             return;
         }
         if (gameManager.deleteArena(args[1])) {
-            sender.sendMessage(plugin.color("&aลบแมพเรียบร้อย"));
+            sender.sendMessage(plugin.prefixed("&aArena deleted."));
         } else {
-            sender.sendMessage(plugin.color("&cไม่พบแมพ"));
+            sender.sendMessage(plugin.prefixed("&cNo arena with that id exists."));
         }
     }
 
     private void handleSetLocation(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(plugin.color("&cเฉพาะผู้เล่นเท่านั้น"));
+            sender.sendMessage(plugin.prefixed("&cOnly players can use this command."));
             return;
         }
         if (!sender.hasPermission("doorhunt.admin")) {
-            sender.sendMessage(plugin.color("&cคุณไม่มีสิทธิ์"));
+            sender.sendMessage(plugin.prefixed("&cYou don't have permission."));
             return;
         }
         if (args.length < 3) {
-            sender.sendMessage(plugin.color("&eใช้คำสั่ง: /dh setloc <id> <" + String.join("|", LocationArgument.keys()) + ">"));
+            sender.sendMessage(plugin.prefixed("&eUsage: /dh setloc <id> <" + String.join("|", LocationArgument.keys()) + ">"));
             return;
         }
         GameArena arena = gameManager.getArena(args[1]);
         if (arena == null) {
-            sender.sendMessage(plugin.color("&cไม่พบแมพ"));
+            sender.sendMessage(plugin.prefixed("&cNo arena with that id exists."));
             return;
         }
         Location location = player.getLocation();
         Optional<LocationArgument> argument = LocationArgument.from(args[2]);
         if (argument.isEmpty()) {
-            sender.sendMessage(plugin.color("&cจุดที่ตั้งได้: " + String.join(", ", LocationArgument.keys())));
+            sender.sendMessage(plugin.prefixed("&cValid locations: " + String.join(", ", LocationArgument.keys())));
             return;
         }
         argument.get().set(arena, location);
         gameManager.saveArena(arena);
-        sender.sendMessage(plugin.color("&aตั้งตำแหน่ง &e" + argument.get().key() + " &aแล้ว"));
+        sender.sendMessage(plugin.prefixed("&aSet location &e" + argument.get().key() + " &a."));
     }
 
     private void handleTeleport(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(plugin.color("&cเฉพาะผู้เล่นเท่านั้น"));
+            sender.sendMessage(plugin.prefixed("&cOnly players can use this command."));
             return;
         }
         if (!sender.hasPermission("doorhunt.admin")) {
-            sender.sendMessage(plugin.color("&cคุณไม่มีสิทธิ์"));
+            sender.sendMessage(plugin.prefixed("&cYou don't have permission."));
             return;
         }
         if (args.length < 3) {
-            sender.sendMessage(plugin.color("&eใช้คำสั่ง: /dh tp <id> <" + String.join("|", LocationArgument.keys()) + ">"));
+            sender.sendMessage(plugin.prefixed("&eUsage: /dh tp <id> <" + String.join("|", LocationArgument.keys()) + ">"));
             return;
         }
         GameArena arena = gameManager.getArena(args[1]);
         if (arena == null) {
-            sender.sendMessage(plugin.color("&cไม่พบแมพ"));
+            sender.sendMessage(plugin.prefixed("&cNo arena with that id exists."));
             return;
         }
         Optional<LocationArgument> argument = LocationArgument.from(args[2]);
         if (argument.isEmpty()) {
-            sender.sendMessage(plugin.color("&cจุดที่มี: " + String.join(", ", LocationArgument.keys())));
+            sender.sendMessage(plugin.prefixed("&cAvailable locations: " + String.join(", ", LocationArgument.keys())));
             return;
         }
         if (!argument.get().isSet(arena)) {
-            sender.sendMessage(plugin.color("&cยังไม่ได้ตั้งตำแหน่งนี้"));
+            sender.sendMessage(plugin.prefixed("&cThat location has not been set."));
             return;
         }
         Location location = argument.get().get(arena);
         player.teleport(location);
-        sender.sendMessage(plugin.color("&aเทเลพอร์ตเรียบร้อย"));
+        sender.sendMessage(plugin.prefixed("&aTeleported."));
     }
 
     private void handleSetLobby(CommandSender sender) {
         if (!sender.hasPermission("doorhunt.admin")) {
-            sender.sendMessage(plugin.color("&cคุณไม่มีสิทธิ์"));
+            sender.sendMessage(plugin.prefixed("&cYou don't have permission."));
             return;
         }
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(plugin.color("&cต้องเป็นผู้เล่นเท่านั้น"));
+            sender.sendMessage(plugin.prefixed("&cOnly players can use this command."));
             return;
         }
         plugin.setLobbyLocation(player.getLocation());
-        player.sendMessage(plugin.color("&aตั้ง Lobby หลักเรียบร้อย!"));
+        player.sendMessage(plugin.prefixed("&aMain lobby location saved!"));
         gameManager.showLobbyBoard(player);
     }
 
     private void handleLobby(CommandSender sender) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(plugin.color("&cเฉพาะผู้เล่นเท่านั้น"));
+            sender.sendMessage(plugin.prefixed("&cOnly players can use this command."));
             return;
         }
         GameInstance instance = gameManager.getGame(player);
@@ -277,31 +277,31 @@ public class DoorHuntCommand implements CommandExecutor, TabCompleter {
             return;
         }
         if (plugin.getLobbyLocation() == null) {
-            sender.sendMessage(plugin.color("&cยังไม่ได้ตั้ง Lobby หลัก"));
+            sender.sendMessage(plugin.prefixed("&cThe main lobby hasn't been set yet."));
             return;
         }
         player.teleport(plugin.getLobbyLocation().clone());
         gameManager.showLobbyBoard(player);
         gameManager.updateLobbyBoards();
-        player.sendMessage(plugin.color("&aย้ายไป Lobby แล้ว"));
+        player.sendMessage(plugin.prefixed("&aMoved to the lobby."));
     }
 
     private void handleSettings(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(plugin.color("&cต้องเป็นผู้เล่นเท่านั้น"));
+            sender.sendMessage(plugin.prefixed("&cOnly players can use this command."));
             return;
         }
         if (!sender.hasPermission("doorhunt.admin")) {
-            sender.sendMessage(plugin.color("&cคุณไม่มีสิทธิ์"));
+            sender.sendMessage(plugin.prefixed("&cYou don't have permission."));
             return;
         }
         if (args.length < 2) {
-            sender.sendMessage(plugin.color("&eใช้คำสั่ง: /dh settings <id>"));
+            sender.sendMessage(plugin.prefixed("&eUsage: /dh settings <id>"));
             return;
         }
         GameArena arena = gameManager.getArena(args[1]);
         if (arena == null) {
-            sender.sendMessage(plugin.color("&cไม่พบแมพ"));
+            sender.sendMessage(plugin.prefixed("&cNo arena with that id exists."));
             return;
         }
         gameManager.openSettingsMenu(player, arena);
@@ -309,25 +309,25 @@ public class DoorHuntCommand implements CommandExecutor, TabCompleter {
 
     private void handleEnd(CommandSender sender, String[] args) {
         if (!sender.hasPermission("doorhunt.admin")) {
-            sender.sendMessage(plugin.color("&cคุณไม่มีสิทธิ์"));
+            sender.sendMessage(plugin.prefixed("&cYou don't have permission."));
             return;
         }
         if (args.length < 2) {
-            sender.sendMessage(plugin.color("&eใช้คำสั่ง: /dh end <id>"));
+            sender.sendMessage(plugin.prefixed("&eUsage: /dh end <id>"));
             return;
         }
         GameInstance instance = gameManager.getLoadedInstance(args[1]);
         if (instance == null || instance.getPlayers().isEmpty()) {
-            sender.sendMessage(plugin.color("&cไม่มีเกมที่กำลังเล่นในแมพนี้"));
+            sender.sendMessage(plugin.prefixed("&cThere is no active game in that arena."));
             return;
         }
         instance.forceEnd();
-        sender.sendMessage(plugin.color("&aจบเกมแล้ว"));
+        sender.sendMessage(plugin.prefixed("&aGame ended."));
     }
 
     private void handleReload(CommandSender sender) {
         if (!sender.hasPermission("doorhunt.admin")) {
-            sender.sendMessage(plugin.color("&cคุณไม่มีสิทธิ์"));
+            sender.sendMessage(plugin.prefixed("&cYou don't have permission."));
             return;
         }
         plugin.reloadConfig();
@@ -336,7 +336,7 @@ public class DoorHuntCommand implements CommandExecutor, TabCompleter {
         plugin.getLanguageManager().reload();
         plugin.getQualityArmoryHook().reload();
         gameManager.loadArenas();
-        sender.sendMessage(plugin.color("&aรีโหลดการตั้งค่าเรียบร้อย"));
+        sender.sendMessage(plugin.prefixed("&aReloaded configuration."));
     }
 
     private int parseInt(String input, int def) {
@@ -348,20 +348,20 @@ public class DoorHuntCommand implements CommandExecutor, TabCompleter {
     }
 
     private void sendHelp(CommandSender sender) {
-        sender.sendMessage(plugin.color("&6Door Hunt Commands:"));
-        sender.sendMessage(plugin.color("&e/dh join <id> &7- เข้าร่วมเกม"));
-        sender.sendMessage(plugin.color("&e/dh leave &7- ออกจากเกม"));
-        sender.sendMessage(plugin.color("&e/dh lobby &7- กลับ Lobby หลัก"));
+        sender.sendMessage(plugin.prefixed("&6Door Hunt Commands:"));
+        sender.sendMessage(plugin.prefixed("&e/dh join <id> &7- Join a game"));
+        sender.sendMessage(plugin.prefixed("&e/dh leave &7- Leave your game"));
+        sender.sendMessage(plugin.prefixed("&e/dh lobby &7- Return to the main lobby"));
         if (sender.hasPermission("doorhunt.admin")) {
-            sender.sendMessage(plugin.color("&e/dh create <id> [ชื่อ]"));
-            sender.sendMessage(plugin.color("&e/dh delete <id>"));
-            sender.sendMessage(plugin.color("&e/dh list"));
-            sender.sendMessage(plugin.color("&e/dh setloc <id> <" + String.join("|", LocationArgument.keys()) + ">"));
-            sender.sendMessage(plugin.color("&e/dh tp <id> <" + String.join("|", LocationArgument.keys()) + ">"));
-            sender.sendMessage(plugin.color("&e/dh settings <id> &7- ตั้งค่าผ่าน GUI"));
-            sender.sendMessage(plugin.color("&e/dh end <id> &7- จบเกมที่ค้างอยู่"));
-            sender.sendMessage(plugin.color("&e/dh setlobby &7- ตั้ง Lobby หลัก"));
-            sender.sendMessage(plugin.color("&e/dh reload"));
+            sender.sendMessage(plugin.prefixed("&e/dh create <id> [name]"));
+            sender.sendMessage(plugin.prefixed("&e/dh delete <id>"));
+            sender.sendMessage(plugin.prefixed("&e/dh list"));
+            sender.sendMessage(plugin.prefixed("&e/dh setloc <id> <" + String.join("|", LocationArgument.keys()) + ">"));
+            sender.sendMessage(plugin.prefixed("&e/dh tp <id> <" + String.join("|", LocationArgument.keys()) + ">"));
+            sender.sendMessage(plugin.prefixed("&e/dh settings <id> &7- Configure via GUI"));
+            sender.sendMessage(plugin.prefixed("&e/dh end <id> &7- End an active game"));
+            sender.sendMessage(plugin.prefixed("&e/dh setlobby &7- Set the main lobby"));
+            sender.sendMessage(plugin.prefixed("&e/dh reload"));
         }
     }
 

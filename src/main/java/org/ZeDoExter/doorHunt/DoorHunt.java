@@ -23,7 +23,7 @@ import org.bukkit.potion.PotionEffect;
 import java.io.File;
 
 public class DoorHunt extends JavaPlugin {
-    private static final String RETURN_ITEM_NAME = "&cกลับ Lobby";
+    private static final String RETURN_ITEM_NAME = "&cReturn to Lobby";
 
     private GameManager gameManager;
     private ScoreboardService scoreboardService;
@@ -73,6 +73,12 @@ public class DoorHunt extends JavaPlugin {
 
     public String color(String message) {
         return ChatColor.translateAlternateColorCodes('&', message);
+    }
+
+    public String prefixed(String message) {
+        String base = message != null ? message : "";
+        String prefix = languageManager != null ? languageManager.getPrefix() : "";
+        return color(prefix + base);
     }
 
     public void resetPlayer(Player player) {

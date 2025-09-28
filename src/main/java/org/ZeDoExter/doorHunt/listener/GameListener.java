@@ -95,7 +95,7 @@ public class GameListener implements Listener {
         GameInstance instance = gameManager.getGame(player);
         if (instance != null) {
             instance.leave(player, false);
-            player.sendMessage(plugin.color("&aกลับสู่ Lobby"));
+            player.sendMessage(plugin.prefixed("&aReturned to the lobby."));
         }
     }
 
