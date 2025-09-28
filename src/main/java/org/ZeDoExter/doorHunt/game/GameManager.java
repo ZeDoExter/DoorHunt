@@ -29,6 +29,10 @@ public class GameManager {
     }
 
     public void loadArenas() {
+        for (GameInstance instance : new ArrayList<>(instances.values())) {
+            instance.shutdown();
+        }
+        instances.clear();
         arenas.clear();
         FileConfiguration config = plugin.getConfig();
         ConfigurationSection section = config.getConfigurationSection("arenas");
@@ -64,10 +68,15 @@ public class GameManager {
     }
 
     private Location readLocation(ConfigurationSection section, String path) {
-        if (!section.isConfigurationSection(path)) {
+        ConfigurationSection node = section.getConfigurationSection(path);
+        if (node == null) {
             return null;
         }
-        return LocationUtil.deserialize(section.getConfigurationSection(path));
+        Location location = LocationUtil.deserialize(node);
+        if (location == null && node.getString("world") != null) {
+            plugin.getLogger().warning("Failed to load spawn '" + path + "' for arena '" + section.getCurrentPath() + "'. Please verify the world exists.");
+        }
+        return location;
     }
 
     public void saveArena(GameArena arena) {

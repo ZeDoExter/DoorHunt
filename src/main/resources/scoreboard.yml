@@ -16,4 +16,4 @@ states:
     - "&7Arena: &f%arena%"
     - "&7Players: &b%players%&7/&b%max%"
     - "&7Seekers: &c%seekers% &7| &aHiders: &a%hiders%"
-    - "&7Time: &f%time%"
+    - "&7%time_label%: &e%time%"

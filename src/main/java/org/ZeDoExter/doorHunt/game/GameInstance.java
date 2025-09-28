@@ -38,10 +38,12 @@ public class GameInstance {
     private BukkitTask liveTask;
     private BukkitTask scoreboardTask;
     private BukkitTask fireworksTask;
+    private BukkitTask cooldownTask;
     private int countdownRemaining;
     private int prepareRemaining;
     private int hideRemaining;
     private int liveRemaining;
+    private int cooldownRemaining;
     private boolean shuttingDown;
 
     public GameInstance(DoorHunt plugin, GameArena arena, GameManager gameManager, ScoreboardService scoreboardService) {
@@ -207,7 +209,7 @@ public class GameInstance {
                 cancelCountdown();
                 beginGame();
             } else {
-                if (countdownRemaining <= 10 || countdownRemaining % 10 == 0) {
+                if (countdownRemaining <= 5 || countdownRemaining % 10 == 0) {
                     broadcast(plugin.color("&eเริ่มใน &c" + countdownRemaining + " &eวินาที"));
                     playSound(Sound.BLOCK_NOTE_BLOCK_PLING, 1.0f, 1.5f);
                 }
@@ -222,6 +224,7 @@ public class GameInstance {
             countdownTask = null;
         }
         cancelFireworksTask();
+        cancelCooldownTask();
         countdownRemaining = 0;
     }
 
@@ -372,6 +375,7 @@ public class GameInstance {
         placeholders.put("killer", killer.getName());
         placeholders.put("victim", victim.getName());
         placeholders.put("time", formatTimeRemaining());
+        placeholders.put("time_label", getTimeLabel());
         String message = plugin.getLanguageManager().random("kill-messages", placeholders, "&c{killer} eliminated &a{victim}");
         broadcast(message);
         preparePlayerForSeeker(victim);
@@ -406,6 +410,7 @@ public class GameInstance {
         Map<String, String> placeholders = new HashMap<>();
         placeholders.put("victim", victim.getName());
         placeholders.put("time", formatTimeRemaining());
+        placeholders.put("time_label", getTimeLabel());
         String message = plugin.getLanguageManager().random("death-messages", placeholders, "&c{victim} ถูกระเบิดกระเด็น! &7({time} left)");
         broadcast(message);
         preparePlayerForSeeker(victim);
@@ -441,6 +446,8 @@ public class GameInstance {
         if (state == GameState.ENDING || state == GameState.COOLDOWN) {
             return;
         }
+        cancelCooldownTask();
+        cooldownRemaining = endCooldownSeconds;
         changeState(GameState.ENDING);
         cancelPrepareTask();
         if (hideTask != null) {
@@ -489,15 +496,34 @@ public class GameInstance {
 
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             changeState(GameState.COOLDOWN);
+            updateScoreboards();
+            if (players.isEmpty()) {
+                resetToLobby();
+                return;
+            }
             for (UUID uuid : new ArrayList<>(players)) {
                 Player player = Bukkit.getPlayer(uuid);
                 if (player != null) {
                     plugin.resetPlayer(player);
                     scoreboardService.clear(player);
-                    player.sendMessage(plugin.color("&eรอ &c" + endCooldownSeconds + " &eวินาทีแล้วจะกลับ Lobby"));
+                    player.sendMessage(plugin.color("&eรอ &c" + cooldownRemaining + " &eวินาทีแล้วจะกลับ Lobby"));
                 }
             }
-            Bukkit.getScheduler().runTaskLater(plugin, this::resetToLobby, endCooldownSeconds * 20L);
+            if (cooldownRemaining <= 0) {
+                resetToLobby();
+                return;
+            }
+            cancelCooldownTask();
+            cooldownTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+                cooldownRemaining--;
+                if (cooldownRemaining <= 0) {
+                    cancelCooldownTask();
+                    updateScoreboards();
+                    resetToLobby();
+                } else {
+                    updateScoreboards();
+                }
+            }, 20L, 20L);
         }, 20L);
     }
 
@@ -508,19 +534,49 @@ public class GameInstance {
                 cancelFireworksTask();
                 return;
             }
-            for (UUID uuid : players) {
-                Player player = Bukkit.getPlayer(uuid);
-                if (player != null) {
-                    spawnRandomFirework(player.getLocation());
-                }
+            List<Player> online = players.stream()
+                    .map(Bukkit::getPlayer)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+            if (online.isEmpty()) {
+                cancelFireworksTask();
+                return;
             }
+            Player target = online.get(ThreadLocalRandom.current().nextInt(online.size()));
+            spawnRandomFirework(target);
         }, 0L, 20L);
         Bukkit.getScheduler().runTaskLater(plugin, this::cancelFireworksTask, Math.max(40L, endCooldownSeconds * 20L));
     }
 
-    private void spawnRandomFirework(Location base) {
+    private void spawnRandomFirework(Player player) {
+        Location base = player.getLocation();
+        if (base.getWorld() == null) {
+            return;
+        }
         ThreadLocalRandom random = ThreadLocalRandom.current();
-        Location location = base.clone().add(random.nextDouble(-20, 20), 1, random.nextDouble(-20, 20));
+        for (int attempt = 0; attempt < 10; attempt++) {
+            double offsetX = random.nextDouble(-20.0, 20.0);
+            double offsetZ = random.nextDouble(-20.0, 20.0);
+            double targetX = base.getX() + offsetX;
+            double targetZ = base.getZ() + offsetZ;
+            int blockX = (int) Math.floor(targetX);
+            int blockZ = (int) Math.floor(targetZ);
+            int highest = base.getWorld().getHighestBlockYAt(blockX, blockZ);
+            double desiredY = Math.max(highest + 1.0, base.getY() + 1.0);
+            int blockY = (int) Math.floor(desiredY);
+            if (blockY >= base.getWorld().getMaxHeight()) {
+                continue;
+            }
+            if (!base.getWorld().getBlockAt(blockX, blockY, blockZ).getType().isAir()) {
+                continue;
+            }
+            Location spawn = new Location(base.getWorld(), blockX + 0.5, blockY + 0.5, blockZ + 0.5);
+            spawnFireworkAt(spawn, random);
+            return;
+        }
+    }
+
+    private void spawnFireworkAt(Location location, ThreadLocalRandom random) {
         location.getWorld().spawn(location, org.bukkit.entity.Firework.class, firework -> {
             var meta = firework.getFireworkMeta();
             meta.clearEffects();
@@ -570,6 +626,7 @@ public class GameInstance {
             scoreboardTask = null;
         }
         cancelFireworksTask();
+        cancelCooldownTask();
         for (UUID uuid : new ArrayList<>(players)) {
             Player player = Bukkit.getPlayer(uuid);
             if (player != null) {
@@ -587,6 +644,7 @@ public class GameInstance {
         countdownRemaining = 0;
         hideRemaining = 0;
         liveRemaining = 0;
+        cooldownRemaining = 0;
         gameManager.updateLobbyBoards();
     }
 
@@ -606,6 +664,7 @@ public class GameInstance {
         }
         cancelCountdown();
         cancelFireworksTask();
+        cancelCooldownTask();
         changeState(GameState.COOLDOWN);
         Bukkit.getScheduler().runTask(plugin, this::resetToLobby);
     }
@@ -638,6 +697,7 @@ public class GameInstance {
             scoreboardTask.cancel();
         }
         cancelFireworksTask();
+        cancelCooldownTask();
         for (UUID uuid : new ArrayList<>(players)) {
             Player player = Bukkit.getPlayer(uuid);
             if (player != null) {
@@ -677,6 +737,7 @@ public class GameInstance {
         placeholders.put("seekers", String.valueOf(seekers.size()));
         placeholders.put("hiders", String.valueOf(hiders.size()));
         placeholders.put("time", formatTimeRemaining());
+        placeholders.put("time_label", getTimeLabel());
         String stateLabel = getStateDisplayName();
         placeholders.put("state", stateLabel);
         placeholders.put("state_name", stateLabel);
@@ -694,12 +755,28 @@ public class GameInstance {
             case PREPARING -> prepareRemaining;
             case HIDING -> hideRemaining;
             case LIVE -> liveRemaining;
-            case ENDING, COOLDOWN -> endCooldownSeconds;
+            case ENDING, COOLDOWN -> Math.max(0, cooldownRemaining);
             default -> 0;
         };
         int minutes = seconds / 60;
         int sec = seconds % 60;
         return String.format("%02d:%02d", minutes, sec);
+    }
+
+    private String getTimeLabel() {
+        return getTimeLabel(state);
+    }
+
+    private String getTimeLabel(GameState state) {
+        return switch (state) {
+            case WAITING -> "Waiting";
+            case COUNTDOWN -> "Starting in";
+            case PREPARING -> "Seekers in";
+            case HIDING -> "Hide time";
+            case LIVE -> "Time remaining";
+            case ENDING -> "Ending in";
+            case COOLDOWN -> "Returning in";
+        };
     }
 
     private void checkCountdownCancel() {
@@ -742,5 +819,12 @@ public class GameInstance {
             case ENDING -> "Ending";
             case COOLDOWN -> "Cooldown";
         };
+    }
+
+    private void cancelCooldownTask() {
+        if (cooldownTask != null) {
+            cooldownTask.cancel();
+            cooldownTask = null;
+        }
     }
 }
