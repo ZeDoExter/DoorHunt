@@ -11,8 +11,11 @@ import org.bukkit.entity.Player;
 import org.bukkit.scoreboard.Team;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
@@ -359,20 +362,88 @@ public class TabListService {
     }
 
     private void updateScoreboardTeams(Player player, Role role) {
-        if (mainScoreboard == null || seekerTeam == null || hiderTeam == null) return;
+        if (player == null || role == null) return;
+        String name = player.getName();
+        applyRoleToAllScoreboards(name, role);
+    }
 
-        removeFromTeams(player.getName());
-        if (role == Role.SEEKER) {
-            safeAddEntry(seekerTeam, player.getName());
-        } else {
-            safeAddEntry(hiderTeam, player.getName());
+    private void applyRoleToAllScoreboards(String name, Role role) {
+        if (name == null || role == null) return;
+        Set<Scoreboard> processed = new HashSet<>();
+        if (mainScoreboard != null) {
+            processed.add(mainScoreboard);
+            applyRoleToScoreboard(mainScoreboard, name, role);
+        }
+        for (Player viewer : Bukkit.getOnlinePlayers()) {
+            Scoreboard scoreboard = viewer.getScoreboard();
+            if (scoreboard == null || !processed.add(scoreboard)) {
+                continue;
+            }
+            applyRoleToScoreboard(scoreboard, name, role);
         }
     }
 
     private void removeFromTeams(String name) {
         if (name == null) return;
-        safeRemoveEntry(seekerTeam, name);
-        safeRemoveEntry(hiderTeam, name);
+        Set<Scoreboard> processed = new HashSet<>();
+        if (mainScoreboard != null) {
+            processed.add(mainScoreboard);
+            removeFromScoreboard(mainScoreboard, name);
+        }
+        for (Player viewer : Bukkit.getOnlinePlayers()) {
+            Scoreboard scoreboard = viewer.getScoreboard();
+            if (scoreboard == null || !processed.add(scoreboard)) {
+                continue;
+            }
+            removeFromScoreboard(scoreboard, name);
+        }
+    }
+
+    public void syncScoreboard(Scoreboard scoreboard) {
+        if (scoreboard == null) return;
+
+        Team seeker = ensureTeam(scoreboard, SEEKER_TEAM, ChatColor.RED);
+        Team hider = ensureTeam(scoreboard, HIDER_TEAM, ChatColor.GREEN);
+
+        safeClearEntries(seeker);
+        safeClearEntries(hider);
+
+        for (Map.Entry<UUID, Role> entry : activeRoles.entrySet()) {
+            String name = resolveName(entry.getKey());
+            if (name == null) {
+                continue;
+            }
+            Team target = entry.getValue() == Role.SEEKER ? seeker : hider;
+            safeAddEntry(target, name);
+        }
+    }
+
+    private void applyRoleToScoreboard(Scoreboard scoreboard, String name, Role role) {
+        if (scoreboard == null || name == null || role == null) return;
+        Team seeker = ensureTeam(scoreboard, SEEKER_TEAM, ChatColor.RED);
+        Team hider = ensureTeam(scoreboard, HIDER_TEAM, ChatColor.GREEN);
+        safeRemoveEntry(seeker, name);
+        safeRemoveEntry(hider, name);
+        Team target = role == Role.SEEKER ? seeker : hider;
+        safeAddEntry(target, name);
+    }
+
+    private void removeFromScoreboard(Scoreboard scoreboard, String name) {
+        if (scoreboard == null || name == null) return;
+        Team seeker = scoreboard.getTeam(SEEKER_TEAM);
+        Team hider = scoreboard.getTeam(HIDER_TEAM);
+        safeRemoveEntry(seeker, name);
+        safeRemoveEntry(hider, name);
+    }
+
+    private void safeClearEntries(Team team) {
+        if (team == null) return;
+        try {
+            for (String entry : new ArrayList<>(team.getEntries())) {
+                team.removeEntry(entry);
+            }
+        } catch (Throwable ignored) {
+        }
     }
 
     private void applyListNameFallback(Player player, Role role, boolean appliedTab) {
@@ -470,6 +541,26 @@ public class TabListService {
             if (team.hasEntry(name)) team.removeEntry(name);
         } catch (Throwable ignored) {
         }
+    }
+
+    private String resolveName(UUID uuid) {
+        if (uuid == null) {
+            return null;
+        }
+        String name = lastKnownNames.get(uuid);
+        if (name != null) {
+            return name;
+        }
+        Player online = Bukkit.getPlayer(uuid);
+        if (online != null) {
+            name = online.getName();
+        } else {
+            name = Bukkit.getOfflinePlayer(uuid).getName();
+        }
+        if (name != null) {
+            lastKnownNames.put(uuid, name);
+        }
+        return name;
     }
 
     // === Reflection helpers ===

@@ -5,6 +5,7 @@ import org.ZeDoExter.doorHunt.DoorHunt;
 import org.ZeDoExter.doorHunt.game.GameInstance;
 import org.ZeDoExter.doorHunt.game.GameManager;
 import org.ZeDoExter.doorHunt.game.GameState;
+import org.ZeDoExter.doorHunt.util.TabListService;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.configuration.ConfigurationSection;
@@ -182,6 +183,10 @@ public class ScoreboardService {
             objective.getScore(line).setScore(score--);
         }
         configureTeams(scoreboard, context);
+        TabListService tabListService = plugin.getTabListService();
+        if (tabListService != null) {
+            tabListService.syncScoreboard(scoreboard);
+        }
         player.setScoreboard(scoreboard);
     }
 
