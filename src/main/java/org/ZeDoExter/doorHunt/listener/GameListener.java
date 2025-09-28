@@ -38,6 +38,7 @@ public class GameListener implements Listener {
             gameManager.showLobbyBoard(event.getPlayer());
             gameManager.updateLobbyBoards();
         }
+        plugin.getTabListService().clear(event.getPlayer());
     }
 
     @EventHandler

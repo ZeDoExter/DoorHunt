@@ -283,6 +283,7 @@ public class GameManager {
         }
         removeLobbyBoard(player);
         updateLobbyBoards();
+        plugin.getTabListService().clear(player);
         closeSettingsMenu(player);
     }
 

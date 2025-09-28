@@ -8,6 +8,7 @@ import org.ZeDoExter.doorHunt.scoreboard.ScoreboardService;
 import org.ZeDoExter.doorHunt.util.LocationUtil;
 import org.ZeDoExter.doorHunt.util.LanguageManager;
 import org.ZeDoExter.doorHunt.util.QualityArmoryHook;
+import org.ZeDoExter.doorHunt.util.TabListService;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
@@ -31,6 +32,7 @@ public class DoorHunt extends JavaPlugin {
     private Location lobbyLocation;
     private LanguageManager languageManager;
     private QualityArmoryHook qualityArmoryHook;
+    private TabListService tabListService;
 
     @Override
     public void onEnable() {
@@ -45,6 +47,7 @@ public class DoorHunt extends JavaPlugin {
         languageManager.reload();
         qualityArmoryHook = new QualityArmoryHook(this);
         qualityArmoryHook.reload();
+        tabListService = new TabListService(this);
         gameManager = new GameManager(this, scoreboardService);
         gameManager.loadArenas();
 
@@ -68,6 +71,9 @@ public class DoorHunt extends JavaPlugin {
     public void onDisable() {
         if (gameManager != null) {
             gameManager.shutdown();
+        }
+        if (tabListService != null) {
+            tabListService.clearAll();
         }
     }
 
@@ -153,6 +159,10 @@ public class DoorHunt extends JavaPlugin {
 
     public QualityArmoryHook getQualityArmoryHook() {
         return qualityArmoryHook;
+    }
+
+    public TabListService getTabListService() {
+        return tabListService;
     }
 
     private void saveResourceIfNotExists(String resource) {

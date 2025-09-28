@@ -2,6 +2,7 @@ package org.ZeDoExter.doorHunt.game;
 
 import org.ZeDoExter.doorHunt.DoorHunt;
 import org.ZeDoExter.doorHunt.scoreboard.ScoreboardService;
+import org.ZeDoExter.doorHunt.util.TabListService;
 import org.bukkit.Bukkit;
 import org.bukkit.Color;
 import org.bukkit.FireworkEffect;
@@ -115,6 +116,7 @@ public class GameInstance {
             player.sendMessage(plugin.prefixed(message));
         }
         gameManager.showLobbyBoard(player);
+        plugin.getTabListService().clear(player);
     }
 
     public void join(Player player) {
@@ -137,6 +139,7 @@ public class GameInstance {
 
         players.add(player.getUniqueId());
         hiders.add(player.getUniqueId());
+        plugin.getTabListService().setRole(player, TabListService.Role.HIDER);
         gameManager.removeLobbyBoard(player);
         gameManager.setPlayerGame(player, this);
         gameManager.updateLobbyBoards();
@@ -160,6 +163,7 @@ public class GameInstance {
         seekerKills.remove(uuid);
         lastAttackers.remove(uuid);
         gameManager.setPlayerGame(player, null);
+        plugin.getTabListService().clear(player);
         sendToLobby(player, silent ? null : "&aReturned to the lobby!" );
         if (removed && !silent) {
             broadcast(plugin.prefixed("&c" + player.getName() + " &eleft the game."));
@@ -331,6 +335,7 @@ public class GameInstance {
                 hiders.add(uuid);
             }
         }
+        updateTabRoles();
     }
 
     private void startLivePhase() {
@@ -379,6 +384,7 @@ public class GameInstance {
         String message = plugin.getLanguageManager().random("kill-messages", placeholders, "&c{killer} eliminated &a{victim}");
         broadcast(message);
         preparePlayerForSeeker(victim);
+        plugin.getTabListService().setRole(victim, TabListService.Role.SEEKER);
         victim.teleport(arena.getHiderSpawn());
         checkWinConditions();
         updateScoreboards();
@@ -414,6 +420,7 @@ public class GameInstance {
         String message = plugin.getLanguageManager().random("death-messages", placeholders, "&c{victim} was blown up! &7({time} left)");
         broadcast(message);
         preparePlayerForSeeker(victim);
+        plugin.getTabListService().setRole(victim, TabListService.Role.SEEKER);
         victim.teleport(arena.getHiderSpawn());
         checkWinConditions();
         updateScoreboards();
@@ -424,6 +431,26 @@ public class GameInstance {
         player.setGameMode(GameMode.SURVIVAL);
         player.sendMessage(plugin.prefixed("&cYou are now a seeker!"));
         plugin.getQualityArmoryHook().giveSeekerLoadout(player);
+    }
+
+    private void updateTabRoles() {
+        TabListService tabService = plugin.getTabListService();
+        if (tabService == null) {
+            return;
+        }
+        for (UUID uuid : players) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player == null) {
+                continue;
+            }
+            if (seekers.contains(uuid)) {
+                tabService.setRole(player, TabListService.Role.SEEKER);
+            } else if (hiders.contains(uuid)) {
+                tabService.setRole(player, TabListService.Role.HIDER);
+            } else {
+                tabService.clear(player);
+            }
+        }
     }
 
     public void checkWinConditions() {
@@ -636,6 +663,7 @@ public class GameInstance {
                 sendToLobby(player, "&aReturned to the lobby!");
             } else {
                 gameManager.clearPlayer(uuid);
+                plugin.getTabListService().clear(uuid);
             }
         }
         players.clear();
