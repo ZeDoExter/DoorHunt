@@ -1,0 +1,37 @@
+title: "&aDoor Hunt"
+states:
+  DEFAULT:
+    - "&7Arena: &f%arena%"
+    - "&7Players: &b%players%&7/&b%max%"
+    - "&7State: &e%state%"
+    - "&7Time: &f%time%"
+  WAITING:
+    - "&7Status: &eWaiting for players"
+    - "&7Players: &b%players%&7/&b%max%"
+    - "&7Need at least: &b%min%"
+  LOBBY:
+    - "&aDoor Hunt"
+    - "&7Online: &b%online%"
+    - "&7In games: &b%ingame%"
+    - "&7Arenas: &b%arenas%"
+    - "&7Use: &e/dh join <id>"
+  COUNTDOWN:
+    - "&7Starting in: &c%time%"
+  PREPARING:
+    - "&7Preparing teams..."
+    - "&f"
+    - "&f"
+    - "&7Release in: &e%time%"
+  HIDING:
+    - "&7Hiding time"
+    - "&f"
+    - "&f"
+    - "&7Seekers in: &e%time%"
+  LIVE:
+    - "&7Hunt in progress"
+    - "&f"
+    - "&f"
+    - "&7Time left: &e%time%"
+  ENDING:
+    - "&7Round summary"
+    - "&7Returning in: &e%time%"
