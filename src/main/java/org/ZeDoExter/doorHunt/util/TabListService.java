@@ -5,8 +5,8 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import org.ZeDoExter.doorHunt.DoorHunt;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
-import org.bukkit.Scoreboard;
-import org.bukkit.ScoreboardManager;
+import org.bukkit.scoreboard.Scoreboard;
+import org.bukkit.scoreboard.ScoreboardManager;
 import org.bukkit.entity.Player;
 import org.bukkit.scoreboard.Team;
 
@@ -17,6 +17,12 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
+/**
+ * TabListService – ปลอดภัยกับทั้ง Paper (Adventure API) และ Spigot (legacy setPlayerListName)
+ * - ใช้ Scoreboard ทีมสำหรับสีชื่อ (fallback)
+ * - ถ้ามี TAB จะใช้ TAB ปรับสี/prefix ให้
+ * - ถ้าไม่มี TAB และไม่มี Paper API → ตกมาที่ setPlayerListName(String)
+ */
 public class TabListService {
 
     public enum Role {
@@ -25,17 +31,22 @@ public class TabListService {
     }
 
     private static final String SEEKER_TEAM = "doorhunt_seeker";
-    private static final String HIDER_TEAM = "doorhunt_hider";
+    private static final String HIDER_TEAM  = "doorhunt_hider";
 
     private final DoorHunt plugin;
+
+    // === Scoreboard ===
     private final Scoreboard mainScoreboard;
     private final Team seekerTeam;
     private final Team hiderTeam;
 
+    // === State ===
     private final Map<UUID, Role> activeRoles = new ConcurrentHashMap<>();
     private final Map<UUID, Component> originalListNames = new ConcurrentHashMap<>();
+    private final Map<UUID, String> originalLegacyNames = new ConcurrentHashMap<>();
     private final Map<UUID, String> lastKnownNames = new ConcurrentHashMap<>();
 
+    // === TAB reflection handles ===
     private final boolean tabHooked;
     private final Object tabApiInstance;
     private final Method getPlayerByUuidMethod;
@@ -54,19 +65,46 @@ public class TabListService {
     private final Object tabColorGreen;
     private final Object tabColorReset;
 
+    // === Paper detection (playerListName(Component)) ===
+    private final boolean hasPaperListName;
+
     public TabListService(DoorHunt plugin) {
         this.plugin = plugin;
-        ScoreboardManager manager = Bukkit.getScoreboardManager();
-        if (manager != null) {
-            mainScoreboard = manager.getMainScoreboard();
-            seekerTeam = ensureTeam(mainScoreboard, SEEKER_TEAM, ChatColor.RED);
-            hiderTeam = ensureTeam(mainScoreboard, HIDER_TEAM, ChatColor.GREEN);
-        } else {
-            mainScoreboard = null;
-            seekerTeam = null;
-            hiderTeam = null;
+
+        // --- Detect Paper Adventure API method availability safely ---
+        boolean paperListName;
+        try {
+            // ถ้าเมธอดนี้มี แปลว่าเป็น Paper (1.19+) ที่มี Adventure API ฝัง
+            Player.class.getMethod("playerListName", Component.class);
+            paperListName = true;
+        } catch (NoSuchMethodException e) {
+            paperListName = false;
+        }
+        this.hasPaperListName = paperListName;
+
+        // --- Setup Scoreboard teams (with null-safe manager) ---
+        Scoreboard sb = null;
+        Team seeker = null;
+        Team hider = null;
+
+        try {
+            ScoreboardManager manager = Bukkit.getScoreboardManager();
+            if (manager != null) {
+                sb = manager.getMainScoreboard();
+                seeker = ensureTeam(sb, SEEKER_TEAM, ChatColor.RED);
+                hider = ensureTeam(sb, HIDER_TEAM, ChatColor.GREEN);
+            } else {
+                plugin.getLogger().warning("[TabListService] ScoreboardManager is null – scoreboard features disabled until server fully enables.");
+            }
+        } catch (Throwable t) {
+            plugin.getLogger().log(Level.WARNING, "[TabListService] Failed to initialize scoreboard teams", t);
         }
 
+        this.mainScoreboard = sb;
+        this.seekerTeam = seeker;
+        this.hiderTeam = hider;
+
+        // --- Try hook TAB API via reflection (covering multiple TAB versions) ---
         Object apiInstance = null;
         Method playerByUuid = null;
         Method playerByPlayer = null;
@@ -80,81 +118,75 @@ public class TabListService {
         Method temporaryColor = null;
         Method resetTemporaryColor = null;
         Class<?> tabPlayerType = null;
-        Object redColor = null;
-        Object greenColor = null;
-        Object resetColor = null;
+        Object redColor = null, greenColor = null, resetColor = null;
         boolean hooked = false;
 
         try {
             Class<?> apiClass = Class.forName("me.neznamy.tab.api.TabAPI");
             Method instanceMethod = apiClass.getMethod("getInstance");
             apiInstance = instanceMethod.invoke(null);
+
             if (apiInstance != null) {
-                playerByUuid = findMethod(apiClass, "getPlayer", UUID.class);
+                playerByUuid   = findMethod(apiClass, "getPlayer", UUID.class);
                 playerByPlayer = findMethod(apiClass, "getPlayer", Player.class);
-                tabPlayerType = Class.forName("me.neznamy.tab.api.TabPlayer");
+                tabPlayerType  = Class.forName("me.neznamy.tab.api.TabPlayer");
+
                 Class<?> tabColorClass = tryLoadClass(
                         "me.neznamy.tab.api.TabColor",
                         "me.neznamy.tab.api.chat.EnumChatFormat",
                         "me.neznamy.tab.api.util.EnumChatFormat"
                 );
-                redColor = resolveColorConstant(tabColorClass, "RED");
+                redColor   = resolveColorConstant(tabColorClass, "RED");
                 greenColor = resolveColorConstant(tabColorClass, "GREEN");
                 resetColor = resolveColorConstant(tabColorClass, "RESET");
-                if (resetColor == null) {
-                    resetColor = resolveColorConstant(tabColorClass, "WHITE");
-                }
+                if (resetColor == null) resetColor = resolveColorConstant(tabColorClass, "WHITE");
+
                 Method teamManagerGetter = findNoArgMethod(apiClass, "getTeamManager", "getNameTagManager");
                 if (teamManagerGetter != null) {
                     teamManager = teamManagerGetter.invoke(apiInstance);
                 }
+
                 if (teamManager != null) {
                     Class<?> teamManagerClass = teamManager.getClass();
-                    setPrefix = findTeamMethod(teamManagerClass, tabPlayerType, String.class, "set", "prefix");
-                    resetPrefix = findTeamMethod(teamManagerClass, tabPlayerType, null, "reset", "prefix");
+                    setPrefix       = findTeamMethod(teamManagerClass, tabPlayerType, String.class, "set", "prefix");
+                    resetPrefix     = findTeamMethod(teamManagerClass, tabPlayerType, null, "reset", "prefix");
+
                     if (tabColorClass != null) {
-                        setNameColor = findTeamMethod(teamManagerClass, tabPlayerType, tabColorClass, "set", "color");
+                        setNameColor   = findTeamMethod(teamManagerClass, tabPlayerType, tabColorClass, "set", "color");
                         resetNameColor = findTeamMethod(teamManagerClass, tabPlayerType, null, "reset", "color");
                     } else {
-                        setNameColor = findTeamMethod(teamManagerClass, tabPlayerType, String.class, "set", "color");
+                        setNameColor   = findTeamMethod(teamManagerClass, tabPlayerType, String.class, "set", "color");
                         resetNameColor = findTeamMethod(teamManagerClass, tabPlayerType, null, "reset", "color");
                     }
                 }
+
                 if (tabPlayerType != null) {
-                    temporaryPrefix = findTabPlayerMethod(tabPlayerType, String.class, "temporary", "prefix");
-                    resetTemporaryPrefix = findTabPlayerMethod(tabPlayerType, null, "reset", "prefix");
+                    temporaryPrefix        = findTabPlayerMethod(tabPlayerType, String.class, "temporary", "prefix");
+                    resetTemporaryPrefix   = findTabPlayerMethod(tabPlayerType, null, "reset", "prefix");
+
                     if (redColor != null && greenColor != null) {
                         temporaryColor = findTabPlayerMethod(tabPlayerType, redColor.getClass(), "temporary", "color");
                     }
                     if (temporaryColor == null) {
                         temporaryColor = findTabPlayerMethod(tabPlayerType, String.class, "temporary", "color");
                     }
-                    resetTemporaryColor = findTabPlayerMethod(tabPlayerType, null, "reset", "color");
+                    resetTemporaryColor    = findTabPlayerMethod(tabPlayerType, null, "reset", "color");
                 }
-                if (playerByUuid != null || playerByPlayer != null) {
-                    if (setPrefix != null || setNameColor != null || temporaryPrefix != null || temporaryColor != null) {
-                        hooked = true;
-                    }
+
+                if ((playerByUuid != null || playerByPlayer != null) &&
+                    (setPrefix != null || setNameColor != null || temporaryPrefix != null || temporaryColor != null)) {
+                    hooked = true;
                 }
             }
-        } catch (Exception ex) {
-            plugin.getLogger().log(Level.FINE, "TAB API not available", ex);
+        } catch (Throwable ex) {
+            plugin.getLogger().log(Level.FINE, "TAB API not available or changed – fallback to scoreboard/list name.", ex);
             apiInstance = null;
-            playerByUuid = null;
-            playerByPlayer = null;
+            playerByUuid = playerByPlayer = null;
             teamManager = null;
-            setPrefix = null;
-            resetPrefix = null;
-            setNameColor = null;
-            resetNameColor = null;
-            temporaryPrefix = null;
-            resetTemporaryPrefix = null;
-            temporaryColor = null;
-            resetTemporaryColor = null;
+            setPrefix = resetPrefix = setNameColor = resetNameColor = null;
+            temporaryPrefix = resetTemporaryPrefix = temporaryColor = resetTemporaryColor = null;
             tabPlayerType = null;
-            redColor = null;
-            greenColor = null;
-            resetColor = null;
+            redColor = greenColor = resetColor = null;
             hooked = false;
         }
 
@@ -177,40 +209,44 @@ public class TabListService {
         this.tabHooked = hooked;
 
         if (hooked) {
-            plugin.getLogger().info("Hooked into TAB for tablist role colors.");
+            plugin.getLogger().info("[TabListService] Hooked into TAB for tablist role colors.");
+        } else {
+            plugin.getLogger().info("[TabListService] TAB not hooked – using scoreboard/list-name fallback.");
         }
     }
 
+    // ===== Public API =====
+
     public void setRole(Player player, Role role) {
-        if (player == null || role == null) {
-            return;
-        }
+        if (player == null || role == null) return;
+
         UUID uuid = player.getUniqueId();
         activeRoles.put(uuid, role);
         lastKnownNames.put(uuid, player.getName());
+
         boolean appliedTab = applyTabRole(player, role);
         updateScoreboardTeams(player, role);
         applyListNameFallback(player, role, appliedTab);
     }
 
     public void clear(Player player) {
-        if (player == null) {
-            return;
-        }
+        if (player == null) return;
+
         UUID uuid = player.getUniqueId();
         activeRoles.remove(uuid);
         lastKnownNames.remove(uuid);
+
         boolean appliedTab = clearTabRole(player);
         removeFromTeams(player.getName());
         restoreListName(player, appliedTab);
     }
 
     public void clear(UUID uuid) {
-        if (uuid == null) {
-            return;
-        }
+        if (uuid == null) return;
+
         activeRoles.remove(uuid);
         originalListNames.remove(uuid);
+        originalLegacyNames.remove(uuid);
         String name = lastKnownNames.remove(uuid);
         if (name != null) {
             removeFromTeams(name);
@@ -219,30 +255,32 @@ public class TabListService {
 
     public void clearAll() {
         for (UUID uuid : new java.util.ArrayList<>(activeRoles.keySet())) {
-            Player player = Bukkit.getPlayer(uuid);
-            if (player != null) {
-                clear(player);
+            Player p = Bukkit.getPlayer(uuid);
+            if (p != null) {
+                clear(p);
             } else {
                 clear(uuid);
             }
         }
         activeRoles.clear();
         originalListNames.clear();
+        originalLegacyNames.clear();
         lastKnownNames.clear();
     }
 
+    // ===== Internals =====
+
     private boolean applyTabRole(Player player, Role role) {
-        if (!tabHooked) {
-            return false;
-        }
+        if (!tabHooked) return false;
+
         Object tabPlayer = resolveTabPlayer(player);
-        if (tabPlayer == null) {
-            return false;
-        }
+        if (tabPlayer == null) return false;
+
         try {
-            String prefix = role == Role.SEEKER ? "&c" : "&a";
-            Object color = role == Role.SEEKER ? tabColorRed : tabColorGreen;
+            String prefix = (role == Role.SEEKER) ? "&c" : "&a";
+            Object color  = (role == Role.SEEKER) ? tabColorRed : tabColorGreen;
             boolean changed = false;
+
             if (teamSetNameColorMethod != null && color != null) {
                 teamSetNameColorMethod.invoke(teamManagerInstance, tabPlayer, color);
                 changed = true;
@@ -250,6 +288,7 @@ public class TabListService {
                 tabPlayerSetTemporaryColorMethod.invoke(tabPlayer, color);
                 changed = true;
             }
+
             if (teamSetPrefixMethod != null) {
                 teamSetPrefixMethod.invoke(teamManagerInstance, tabPlayer, prefix);
                 changed = true;
@@ -257,23 +296,23 @@ public class TabListService {
                 tabPlayerSetTemporaryPrefixMethod.invoke(tabPlayer, prefix);
                 changed = true;
             }
+
             return changed;
-        } catch (Exception ex) {
+        } catch (Throwable ex) {
             plugin.getLogger().log(Level.FINE, "Failed to apply TAB role color to " + player.getName(), ex);
             return false;
         }
     }
 
     private boolean clearTabRole(Player player) {
-        if (!tabHooked) {
-            return false;
-        }
+        if (!tabHooked) return false;
+
         Object tabPlayer = resolveTabPlayer(player);
-        if (tabPlayer == null) {
-            return false;
-        }
+        if (tabPlayer == null) return false;
+
         try {
             boolean changed = false;
+
             if (teamResetNameColorMethod != null) {
                 teamResetNameColorMethod.invoke(teamManagerInstance, tabPlayer);
                 changed = true;
@@ -284,6 +323,7 @@ public class TabListService {
                 teamSetNameColorMethod.invoke(teamManagerInstance, tabPlayer, tabColorReset);
                 changed = true;
             }
+
             if (teamResetPrefixMethod != null) {
                 teamResetPrefixMethod.invoke(teamManagerInstance, tabPlayer);
                 changed = true;
@@ -294,97 +334,149 @@ public class TabListService {
                 teamSetPrefixMethod.invoke(teamManagerInstance, tabPlayer, "");
                 changed = true;
             }
+
             return changed;
-        } catch (Exception ex) {
+        } catch (Throwable ex) {
             plugin.getLogger().log(Level.FINE, "Failed to clear TAB role color for " + player.getName(), ex);
             return false;
         }
     }
 
     private Object resolveTabPlayer(Player player) {
-        if (tabApiInstance == null) {
-            return null;
-        }
+        if (tabApiInstance == null) return null;
         try {
             if (getPlayerByPlayerMethod != null) {
-                Object tabPlayer = getPlayerByPlayerMethod.invoke(tabApiInstance, player);
-                if (tabPlayer != null) {
-                    return tabPlayer;
-                }
+                Object tp = getPlayerByPlayerMethod.invoke(tabApiInstance, player);
+                if (tp != null) return tp;
             }
             if (getPlayerByUuidMethod != null) {
                 return getPlayerByUuidMethod.invoke(tabApiInstance, player.getUniqueId());
             }
-        } catch (Exception ex) {
+        } catch (Throwable ex) {
             plugin.getLogger().log(Level.FINE, "Failed to resolve TAB player for " + player.getName(), ex);
         }
         return null;
     }
 
     private void updateScoreboardTeams(Player player, Role role) {
-        if (seekerTeam == null || hiderTeam == null) {
-            return;
-        }
+        if (mainScoreboard == null || seekerTeam == null || hiderTeam == null) return;
+
         removeFromTeams(player.getName());
         if (role == Role.SEEKER) {
-            seekerTeam.addEntry(player.getName());
-        } else if (role == Role.HIDER) {
-            hiderTeam.addEntry(player.getName());
+            safeAddEntry(seekerTeam, player.getName());
+        } else {
+            safeAddEntry(hiderTeam, player.getName());
         }
     }
 
     private void removeFromTeams(String name) {
-        if (name == null) {
-            return;
-        }
-        if (seekerTeam != null) {
-            seekerTeam.removeEntry(name);
-        }
-        if (hiderTeam != null) {
-            hiderTeam.removeEntry(name);
-        }
+        if (name == null) return;
+        safeRemoveEntry(seekerTeam, name);
+        safeRemoveEntry(hiderTeam, name);
     }
 
     private void applyListNameFallback(Player player, Role role, boolean appliedTab) {
+        // ถ้า TAB จัดการแล้ว → คืนค่าเดิม/ไม่ทับชื่อ
         if (appliedTab) {
             restoreListName(player, true);
             return;
         }
+
         UUID uuid = player.getUniqueId();
-        originalListNames.computeIfAbsent(uuid, key -> {
-            Component original = player.playerListName();
-            return original != null ? original : Component.text(player.getName());
-        });
-        NamedTextColor color = role == Role.SEEKER ? NamedTextColor.RED : NamedTextColor.GREEN;
-        player.playerListName(Component.text(player.getName(), color));
+
+        if (hasPaperListName) {
+            // เก็บของเดิมเป็น Component
+            originalListNames.computeIfAbsent(uuid, key -> {
+                Component cur = player.playerListName();
+                return (cur != null) ? cur : Component.text(player.getName());
+            });
+            NamedTextColor color = (role == Role.SEEKER) ? NamedTextColor.RED : NamedTextColor.GREEN;
+            player.playerListName(Component.text(player.getName(), color));
+        } else {
+            // Legacy Spigot
+            originalLegacyNames.computeIfAbsent(uuid, key -> {
+                String cur = player.getPlayerListName();
+                return (cur != null) ? cur : player.getName();
+            });
+            String color = (role == Role.SEEKER) ? ChatColor.RED.toString() : ChatColor.GREEN.toString();
+            player.setPlayerListName(color + player.getName());
+        }
     }
 
     private void restoreListName(Player player, boolean fromTab) {
         UUID uuid = player.getUniqueId();
-        Component original = originalListNames.remove(uuid);
-        if (original != null) {
-            player.playerListName(original);
-        } else if (!fromTab) {
-            player.playerListName(Component.text(player.getName()));
+
+        if (hasPaperListName) {
+            Component original = originalListNames.remove(uuid);
+            if (original != null) {
+                player.playerListName(original);
+            } else if (!fromTab) {
+                player.playerListName(Component.text(player.getName()));
+            }
+        } else {
+            String orig = originalLegacyNames.remove(uuid);
+            if (orig != null) {
+                player.setPlayerListName(orig);
+            } else if (!fromTab) {
+                player.setPlayerListName(player.getName());
+            }
         }
     }
 
     private Team ensureTeam(Scoreboard scoreboard, String name, ChatColor color) {
+        if (scoreboard == null) return null;
+
         Team team = scoreboard.getTeam(name);
         if (team == null) {
-            team = scoreboard.registerNewTeam(name);
+            try {
+                team = scoreboard.registerNewTeam(name);
+            } catch (IllegalArgumentException already) {
+                // ถูกสร้างไปแล้วพร้อมกันที่อื่น
+                team = scoreboard.getTeam(name);
+            }
         }
-        team.setColor(color);
-        team.setPrefix(color.toString());
-        team.setOption(Team.Option.COLLISION_RULE, Team.OptionStatus.NEVER);
+        if (team == null) return null;
+
+        try {
+            team.setColor(color);
+        } catch (Throwable ignored) {
+            // บางบิลด์เก่าของ Bukkit อาจไม่รองรับ setColor – ข้ามได้
+        }
+
+        try {
+            team.setPrefix(color.toString());
+        } catch (Throwable ignored) {
+        }
+
+        try {
+            team.setOption(Team.Option.COLLISION_RULE, Team.OptionStatus.NEVER);
+        } catch (Throwable ignored) {
+        }
+
         return team;
     }
 
+    private void safeAddEntry(Team team, String name) {
+        if (team == null || name == null) return;
+        try {
+            if (!team.hasEntry(name)) team.addEntry(name);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void safeRemoveEntry(Team team, String name) {
+        if (team == null || name == null) return;
+        try {
+            if (team.hasEntry(name)) team.removeEntry(name);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    // === Reflection helpers ===
+
     private Method findMethod(Class<?> type, String name, Class<?> parameter) {
         try {
-            if (parameter == null) {
-                return type.getMethod(name);
-            }
+            if (parameter == null) return type.getMethod(name);
             return type.getMethod(name, parameter);
         } catch (NoSuchMethodException ignored) {
             return null;
@@ -401,15 +493,14 @@ public class TabListService {
         return null;
     }
 
-    private Method findTeamMethod(Class<?> type, Class<?> tabPlayerType, Class<?> secondParameter, String actionKeyword, String subjectKeyword) {
+    private Method findTeamMethod(Class<?> type, Class<?> tabPlayerType, Class<?> secondParameter,
+                                  String actionKeyword, String subjectKeyword) {
         for (Method method : type.getMethods()) {
-            if (method.getParameterCount() == 0) {
-                continue;
-            }
+            if (method.getParameterCount() == 0) continue;
+
             String lower = method.getName().toLowerCase(Locale.ROOT);
-            if (!lower.contains(actionKeyword) || !lower.contains(subjectKeyword)) {
-                continue;
-            }
+            if (!lower.contains(actionKeyword) || !lower.contains(subjectKeyword)) continue;
+
             Class<?>[] params = method.getParameterTypes();
             if (tabPlayerType != null) {
                 if (!params[0].isAssignableFrom(tabPlayerType) && !tabPlayerType.isAssignableFrom(params[0])) {
@@ -417,9 +508,7 @@ public class TabListService {
                 }
             }
             if (secondParameter == null) {
-                if (params.length == 1) {
-                    return method;
-                }
+                if (params.length == 1) return method;
                 continue;
             }
             if (params.length >= 2 && (params[1].isAssignableFrom(secondParameter) || secondParameter.isAssignableFrom(params[1]))) {
@@ -432,13 +521,10 @@ public class TabListService {
     private Method findTabPlayerMethod(Class<?> type, Class<?> parameter, String actionKeyword, String subjectKeyword) {
         for (Method method : type.getMethods()) {
             String lower = method.getName().toLowerCase(Locale.ROOT);
-            if (!lower.contains(actionKeyword) || !lower.contains(subjectKeyword)) {
-                continue;
-            }
+            if (!lower.contains(actionKeyword) || !lower.contains(subjectKeyword)) continue;
+
             if (parameter == null) {
-                if (method.getParameterCount() == 0) {
-                    return method;
-                }
+                if (method.getParameterCount() == 0) return method;
                 continue;
             }
             if (method.getParameterCount() == 1) {
@@ -455,17 +541,14 @@ public class TabListService {
         for (String name : candidates) {
             try {
                 return Class.forName(name);
-            } catch (ClassNotFoundException ignored) {
-            }
+            } catch (ClassNotFoundException ignored) { }
         }
         return null;
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private Object resolveColorConstant(Class<?> colorClass, String name) {
-        if (colorClass == null || !colorClass.isEnum()) {
-            return null;
-        }
+        if (colorClass == null || !colorClass.isEnum()) return null;
         try {
             return Enum.valueOf((Class<? extends Enum>) colorClass.asSubclass(Enum.class), name);
         } catch (IllegalArgumentException ignored) {
