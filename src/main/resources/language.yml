@@ -1,0 +1,4 @@
+kill-messages:
+  - "&c{killer} eliminated &a{victim}&c! &7({time} left)"
+  - "&c{killer} tagged &a{victim}&c. &7Time remaining: {time}"
+  - "&c{killer}&7 found &a{victim}&7 in the dark!"

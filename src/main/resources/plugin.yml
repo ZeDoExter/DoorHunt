@@ -2,3 +2,14 @@ name: DoorHunt
 version: '1.0-SNAPSHOT'
 main: org.ZeDoExter.doorHunt.DoorHunt
 api-version: '1.21'
+softdepend:
+  - QualityArmory
+commands:
+  dh:
+    description: Door Hunt main command
+    usage: /<command>
+    aliases: [doorhunt]
+permissions:
+  doorhunt.admin:
+    description: Admin commands for Door Hunt
+    default: op

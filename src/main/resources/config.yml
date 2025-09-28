@@ -1,0 +1,14 @@
+settings:
+  min-players: 2
+  max-players: 16
+  recruiting-countdown: 60
+  prepare-duration: 10
+  hide-duration: 30
+  live-duration: 3600
+  end-cooldown: 10
+  seeker-loadout:
+    commands:
+      - "/qa give m16 %player%"
+      - "/qa give 556 %player% 30"
+      - "/qa give grenade %player%"
+arenas: {}
