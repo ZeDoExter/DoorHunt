@@ -774,7 +774,7 @@ public class GameInstance {
             case PREPARING -> "Seekers in";
             case HIDING -> "Hide time";
             case LIVE -> "Time remaining";
-            case ENDING -> "Ending in";
+            case ENDING -> "Ended";
             case COOLDOWN -> "Returning in";
         };
     }

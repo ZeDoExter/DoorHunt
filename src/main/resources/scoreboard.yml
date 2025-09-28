@@ -5,7 +5,6 @@ states:
     - "&7Players: &b%players%&7/&b%max%"
     - "&7Need at least: &b%min%"
   LOBBY:
-    - "&aDoor Hunt"
     - "&7Online: &b%online%"
     - "&7In games: &b%ingame%"
     - "&7Arenas: &b%arenas%"

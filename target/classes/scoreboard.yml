@@ -5,7 +5,6 @@ states:
     - "&7Players: &b%players%&7/&b%max%"
     - "&7Need at least: &b%min%"
   LOBBY:
-    - "&aDoor Hunt"
     - "&7Online: &b%online%"
     - "&7In games: &b%ingame%"
     - "&7Arenas: &b%arenas%"
@@ -16,4 +15,4 @@ states:
     - "&7Arena: &f%arena%"
     - "&7Players: &b%players%&7/&b%max%"
     - "&7Seekers: &c%seekers% &7| &aHiders: &a%hiders%"
-    - "&7Time: &f%time%"
+    - "&7%time_label%: &e%time%"
